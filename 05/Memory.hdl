@@ -27,5 +27,25 @@ CHIP Memory {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+    // 1. 寫入控制分流 (Demux)
+    // 利用 address[13..14] 判斷寫入目標：
+    // 00, 01 -> RAM16K (address[14] == 0)
+    // 10     -> Screen
+    // 11     -> Keyboard (唯讀，無視 load)
+    DMux4Way(in=load, sel=address[13..14], a=loadRam0, b=loadRam1, c=loadScreen, d=loadKbd);
+    Or(a=loadRam0, b=loadRam1, out=loadRam);
+
+    // 2. 記憶體元件連接
+    // RAM16K: 使用位址 0..13 (涵蓋 16K 個字組)
+    RAM16K(in=in, load=loadRam, address=address[0..13], out=ramOut);
+
+    // Screen: 使用位址 0..12 (涵蓋 8K 個字組)
+    Screen(in=in, load=loadScreen, address=address[0..12], out=screenOut);
+
+    // Keyboard: 唯讀設備，不需 load 輸入
+    Keyboard(out=kbdOut);
+
+    // 3. 讀取輸出多路選擇 (Mux)
+    // 根據 address[13..14] 選擇對應設備的輸出資料
+    Mux4Way16(a=ramOut, b=ramOut, c=screenOut, d=kbdOut, sel=address[13..14], out=out);
 }

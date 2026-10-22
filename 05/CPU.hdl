@@ -39,5 +39,55 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    // 1. 指令解碼 (Instruction Decoding)
+    // instruction[15] == 0 代表 A-指令，1 代表 C-指令
+    Not(in=instruction[15], out=isAInstruction);
+    Not(in=isAInstruction, out=isCInstruction);
+
+    // 2. A 暫存器 (A Register) 控制
+    // A-指令時寫入指令位址；C-指令時若 d1 (instruction[5]) 為 1 則寫入 ALU 計算結果
+    Mux16(a=instruction, b=aluOut, sel=instruction[15], out=aRegIn);
+    Or(a=isAInstruction, b=instruction[5], out=loadA);
+    ARegister(in=aRegIn, load=loadA, out=aRegOut, out[0..14]=addressM);
+
+    // 3. ALU 輸入源選擇 (A 暫存器 或 M 記憶體)
+    // 由 a-bit (instruction[12]) 決定 ALU 的 Y 輸入為 A 還是 M
+    Mux16(a=aRegOut, b=inM, sel=instruction[12], out=aOrM);
+
+    // 4. D 暫存器 (D Register) 控制
+    // C-指令且 d2 (instruction[4]) 為 1 時載入 ALU 計算結果
+    And(a=isCInstruction, b=instruction[4], out=loadD);
+    DRegister(in=aluOut, load=loadD, out=dRegOut);
+
+    // 5. ALU 算術邏輯單元運算
+    // 傳入 c1~c6 (instruction[11..6]) 作為控制訊號
+    ALU(x=dRegOut, y=aOrM, 
+        zx=instruction[11], nx=instruction[10], 
+        zy=instruction[9], ny=instruction[8], 
+        f=instruction[7], no=instruction[6], 
+        out=aluOut, out=outM, zr=zr, ng=ng);
+
+    // 6. 記憶體寫入控制 (writeM)
+    // C-指令且 d3 (instruction[3]) 為 1 時觸發記憶體寫入
+    And(a=isCInstruction, b=instruction[3], out=writeM);
+
+    // 7. Jump 跳躍判斷與程序計數器 (PC) 控制
+    // 計算出 ALU 結果是否大於零 (pos)
+    Not(in=zr, out=notZr);
+    Not(in=ng, out=notNg);
+    And(a=notZr, b=notNg, out=pos);
+
+    // 匹配 j1, j2, j3 (instruction[2..0]) 跳躍條件
+    And(a=instruction[2], b=ng, out=jumpNeg);   // j1: out < 0
+    And(a=instruction[1], b=zr, out=jumpZero);  // j2: out == 0
+    And(a=instruction[0], b=pos, out=jumpPos);  // j3: out > 0
+
+    Or(a=jumpNeg, b=jumpZero, out=jumpNegZero);
+    Or(a=jumpNegZero, b=jumpPos, out=jumpCond);
+
+    // 僅在 C-指令且滿足跳躍條件時載入新位址 (JMP)
+    And(a=isCInstruction, b=jumpCond, out=loadPC);
+
+    // 若未觸發 Jump (loadPC=0)，預設遞增 +1 (inc=true)
+    PC(in=aRegOut, load=loadPC, inc=true, reset=reset, out[0..14]=pc);
 }
