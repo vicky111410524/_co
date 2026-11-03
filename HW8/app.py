@@ -4,6 +4,7 @@ import gspread
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound, WorksheetNotFound
 
 st.set_page_config(page_title="雲端記帳本", layout="wide")
@@ -18,10 +19,15 @@ CATEGORIES = ["飲食", "交通", "購物", "娛樂", "生活", "醫療", "教�
 
 @st.cache_resource(show_spinner="正在連線至 Google 試算表...")
 def get_client():
-    credentials = dict(st.secrets["gcp_service_account"])
-    if "private_key" in credentials:
-        credentials["private_key"] = credentials["private_key"].replace("\\n", "\n")
-    return gspread.service_account_from_dict(credentials)
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    return gspread.authorize(credentials)
 
 
 @st.cache_resource(show_spinner=False)
